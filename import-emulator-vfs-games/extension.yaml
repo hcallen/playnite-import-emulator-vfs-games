@@ -1,0 +1,6 @@
+﻿Id: ImportEmuVFSGames_0bba3b76-67da-4a17-9993-22d829915862
+Name: Import Emulator Virtual File System Games
+Author: Hallie Allen
+Version: 0.1
+Module: import-emu-vfs-games.psm1
+Type: Script
