@@ -192,10 +192,10 @@ function Get-IsGameDuplicate {
         [Playnite.SDK.Models.Game]$NewGame
     )
 
-    if  ((($PlayniteApi.Database.Games | Where-Object { $_.GameId -eq $NewGame.GameId}) | Measure-Object).Count -ge 1){
+    if ((($PlayniteApi.Database.Games | Where-Object { $_.GameId -eq $NewGame.GameId }) | Measure-Object).Count -ge 1) {
         $isDuplicate = $true
     }
-    elseif ((($PlayniteApi.Database.Games.GameActions | Where-Object { $_.Arguments -like "*$($NewGame.GameId)*"}) | Measure-Object).Count -ge 1) {
+    elseif ((($PlayniteApi.Database.Games.GameActions | Where-Object { $_.Arguments -like "*$($NewGame.GameId)*" }) | Measure-Object).Count -ge 1) {
         $isDuplicate = $true
     }
     else {
@@ -224,6 +224,56 @@ function Get-IsGameValid {
     
 }
 
+function Get-GameRegionId {
+    param (
+        [Playnite.SDK.Models.Emulator]$Emulator,
+        [hashtable] $GameMetadata
+    )
+
+    $regionName = switch ($Emulator.BuiltInConfigId) {
+        "rpcs3" {
+            switch ($GameMetadata.TITLE_ID[2]) {
+                'A' { 'Asia' }
+                'E' { 'Europe' }
+                'H' { 'Hong Kong' }
+                'J' { 'Japan' }
+                'K' { 'Korea' }
+                'U' { 'USA' }
+                Default { $null }
+            }
+        }
+        "vita3k" {
+            switch ($GameMetadata.TITLE_ID[3]) {
+                'A' { 'USA' }
+                'B' { 'Europe' }
+                'C' { 'Japan' }
+                'D' { 'Asia' }
+                'E' { 'USA' }
+                'F' { 'Europe' }
+                'G' { 'Japan' }
+                'H' { 'Asia' }
+                Default { $null }
+            } 
+        }
+    }
+
+    # $__logger.Trace("Get-GameRegionId - regionName=$($regionName)")
+
+    $regionId = ($PlayniteApi.Database.Regions | Where-Object { $_.Name -eq $regionName } | Select-Object -First 1).Id
+    if (-not $regionId) {
+        $newRegion = New-Object 'Playnite.SDK.Models.Region'
+        $newRegion.Name = $regionName
+        $newRegion.SpecificationId = $regionName.ToLower()
+        $PlayniteApi.Database.Regions.Add($newRegion)
+        # $__logger.Trace("Get-GameRegionId - newRegion.Name=$($newRegion.Name)")
+        $regionId = ($PlayniteApi.Database.Regions | Where-Object { $_.Name -eq $regionName } | Select-Object -First 1).Id
+    }
+
+    # $__logger.Trace("Get-GameRegionId - regionId=$($regionId)")
+
+    return $regionId
+}
+
 function Add-VFSGameToLibrary() {
     param (
         [Playnite.SDK.Models.Emulator]$Emulator,
@@ -238,18 +288,16 @@ function Add-VFSGameToLibrary() {
     }
     $newGame.Name = switch ($Emulator.BuiltInConfigId) {
         "rpcs3" { $GameMetadata.TITLE }
-        "vita3k" { $GameMetadata.TITLE}
+        "vita3k" { $GameMetadata.TITLE }
     }
-    $newGame.Name = ($newGame.Name -creplace '\P{IsBasicLatin}').replace("`n"," ")
+    $newGame.Name = ($newGame.Name -creplace '\P{IsBasicLatin}').replace("`n", " ")
     $newGame.PlatformIds = $Platform.Id
     $newGame.IsInstalled = $true
+    $newGame.RegionIds = Get-GameRegionId $Emulator $GameMetadata
 
     $newAction = New-Object "Playnite.SDK.Models.GameAction"
     $newAction.Type = "Emulator"
-    $newAction.Name = switch ($Emulator.BuiltInConfigId) {
-        "rpcs3" { (($GameMetadata.TITLE) -creplace '\P{IsBasicLatin}') }
-        "vita3k" { (($GameMetadata.TITLE) -creplace '\P{IsBasicLatin}') }
-    }
+    $newAction.Name = $newGame.Name
     $newAction.IsPlayAction = $true
     $newAction.OverrideDefaultArgs = $true
     $newAction.Arguments = switch ($Emulator.BuiltInConfigId) {
@@ -260,7 +308,7 @@ function Add-VFSGameToLibrary() {
     $newAction.EmulatorProfileId = ($Emulator.AllProfiles | Select-Object -First 1).Id
     $newGame.GameActions = $newAction
 
-    If ((Get-IsGameValid $emulator $newGame $GameMetadata) -and (-not (Get-IsGameDuplicate $emulator $newGame))){
+    If ((Get-IsGameValid $emulator $newGame $GameMetadata) -and (-not (Get-IsGameDuplicate $emulator $newGame))) {
         $PlayniteApi.Database.Games.Add($newGame)
         $__logger.Info("Added game: $($newGame.Name)")
         return $true
