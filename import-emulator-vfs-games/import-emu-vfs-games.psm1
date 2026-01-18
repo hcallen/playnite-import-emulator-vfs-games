@@ -28,12 +28,11 @@ function Import-VFSGames() {
     $emulator = Get-Emulator -EmulatorName $EmulatorName
     $platform = Get-Platform -Emulator $emulator
 
-    $metaDataSearchPath = Get-MetaDataSearchPath -Emulator $emulator -Content (Get-ConfigContent -Emulator $emulator)
-    $metaDataPaths = (Get-GameMetaDataDirPaths -Emulator $emulator -Path $metaDataSearchPath) | ForEach-Object { (Get-MetaDataFilePath  -Emulator $emulator -Path $_) }
-    $metaDataTables = $metaDataPaths | ForEach-Object { ConvertTo-MetaDataTable -Emulator $emulator -Path $_ }
-    $__logger.Info("Found $(($metaDataTables | Measure-Object).Count) game metadata files")
+    $gameInstallationSearchPath = Get-GameInstallationSearchPath -Emulator $emulator -Content (Get-ConfigContent -Emulator $emulator)
+    $gameInstallationPaths = (Get-GameInstallationPaths -Emulator $emulator -Path $gameInstallationSearchPath)
+    $__logger.Info("Found $(($gameInstallationPaths | Measure-Object).Count) game installations")
 
-    $gamesAdded = ($metaDataTables | ForEach-Object { (Add-VFSGameToLibrary $emulator $platform $_) }) | Where-Object {$_ -eq $true}
+    $gamesAdded = ($gameInstallationPaths | ForEach-Object { (Add-VFSGameToLibrary $emulator $platform $_) }) | Where-Object {$_ -eq $true}
     $__logger.Info("Added $(($gamesAdded | Measure-Object).Count) game(s)")
 
 }
