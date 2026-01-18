@@ -1,3 +1,6 @@
+<# 
+Get the content of emulator configuration file.
+#>
 function Get-ConfigContent() {
     param (
         [System.Object]$Emulator
@@ -12,16 +15,16 @@ function Get-ConfigContent() {
         "vita3k" { [IO.Path]::Combine($Emulator.InstallDir, 'config.yml') }
     }
     
-    # $__logger.Trace("Get-ConfigContent - configPath=$($configPath)")
+    $__logger.Trace("Get-ConfigContent - configPath=$($configPath)")
 
     $configContent = (Get-Content -Path $configPath | Out-String)
-    # $__logger.Trace("Get-ConfigContent - configContent=$($configContent)")
+    $__logger.Trace("Get-ConfigContent - configContent=$($configContent)")
 
     return $configContent
     
 }
 
-function Get-MetaDataSearchPath() {
+function Get-GameInstallationSearchPath() {
     param (
         [Parameter(Mandatory, Position = 0)][System.Object]$Emulator,
         [Parameter(Mandatory, Position = 1)][string]$Content
@@ -63,11 +66,11 @@ function Get-MetaDataSearchPath() {
         Exit
     }
 
-    # $__logger.Trace("Get-MetaDataSearchPath - searchPath=$($searchPath)")
+    $__logger.Trace("Get-GameInstallationSearchPath - searchPath=$($searchPath)")
     return $searchPath
 }
 
-function Get-GameMetaDataDirPaths {
+function Get-GameInstallationPaths {
     param (
         [Parameter(Mandatory, Position = 0)][System.Object]$Emulator,
         [Parameter(Mandatory, Position = 1)][string][string]$Path
@@ -84,7 +87,7 @@ function Get-GameMetaDataDirPaths {
 
     $dataDirs = ($dataDirs | ForEach-Object { $_.FullName })
 
-    # $__logger.Trace("Get-GameMetaDataDirPaths - dataDirs.Count=$(($dataDirs | Measure-Object).Count)")
+    $__logger.Trace("Get-GameInstallationPaths - dataDirs.Count=$(($dataDirs | Measure-Object).Count)")
     return $dataDirs
 }
 
@@ -120,7 +123,7 @@ function Get-MetaDataFilePath {
         }
     }
 
-    # $__logger.Trace("Get-MetaDataFilePath - filePath=$($filePath)")
+    $__logger.Trace("Get-MetaDataFilePath - filePath=$($filePath)")
 
     return $filePath
 }
@@ -162,7 +165,7 @@ function Get-Platform() {
         "vita3k" { "Sony Playstation Vita" }
     }
     $platform = $PlayniteApi.Database.Platforms | Where-Object { $_.Name -eq $platformName }
-    # $__logger.Trace("Get-Platform - platform=$($platform)")
+    $__logger.Trace("Get-Platform - platform=$($platform)")
     return $platform
 }
 
@@ -172,7 +175,7 @@ function Get-Emulator() {
     )
     
     $emulator = ($PlayniteApi.Database.Emulators | Where-Object { $_.BuiltInConfigId -eq $EmulatorName.ToLower() }) | Select-Object -First 1
-    # $__logger.Trace("Get-Emulator - emulator.BuiltInConfigId=$($emulator.BuiltInConfigId)")
+    $__logger.Trace("Get-Emulator - emulator.BuiltInConfigId=$($emulator.BuiltInConfigId)")
 
     If (-not $Emulator) {
         $__logger.Error("Unable to locate $EmulatorName")
@@ -180,7 +183,7 @@ function Get-Emulator() {
         Exit
     }
 
-    # $__logger.Trace("Get-Emulator - emulator=$($emulator)")
+    $__logger.Trace("Get-Emulator - emulator=$($emulator)")
     
     return $emulator
 
@@ -202,7 +205,7 @@ function Get-IsGameDuplicate {
         $isDuplicate = $false
     }
 
-    # $__logger.Trace("Get-IsGameDuplicate - isDuplicate=$($isDuplicate)")
+    $__logger.Trace("Get-IsGameDuplicate - isDuplicate=$($isDuplicate)")
     return $isDuplicate
 }
 
@@ -218,7 +221,7 @@ function Get-IsGameValid {
         "vita3k" { $NewGame.GameId.StartsWith("PCS") }
     }
 
-    # $__logger.Trace("Get-IsGameValid - isValid=$($isValid)")
+    $__logger.Trace("Get-IsGameValid - isValid=$($isValid)")
     return $isValid
 
     
@@ -257,7 +260,7 @@ function Get-GameRegionId {
         }
     }
 
-    # $__logger.Trace("Get-GameRegionId - regionName=$($regionName)")
+    $__logger.Trace("Get-GameRegionId - regionName=$($regionName)")
 
     $regionId = ($PlayniteApi.Database.Regions | Where-Object { $_.Name -eq $regionName } | Select-Object -First 1).Id
     if (-not $regionId) {
@@ -265,11 +268,11 @@ function Get-GameRegionId {
         $newRegion.Name = $regionName
         $newRegion.SpecificationId = $regionName.ToLower()
         $PlayniteApi.Database.Regions.Add($newRegion)
-        # $__logger.Trace("Get-GameRegionId - newRegion.Name=$($newRegion.Name)")
+        $__logger.Trace("Get-GameRegionId - newRegion.Name=$($newRegion.Name)")
         $regionId = ($PlayniteApi.Database.Regions | Where-Object { $_.Name -eq $regionName } | Select-Object -First 1).Id
     }
 
-    # $__logger.Trace("Get-GameRegionId - regionId=$($regionId)")
+    $__logger.Trace("Get-GameRegionId - regionId=$($regionId)")
 
     return $regionId
 }
@@ -278,22 +281,26 @@ function Add-VFSGameToLibrary() {
     param (
         [Playnite.SDK.Models.Emulator]$Emulator,
         [Playnite.SDK.Models.Platform]$Platform,
-        [hashtable]$GameMetadata
+        [string[]]$GameInstallPath
     )
 
+    $gameMetadataPath = Get-MetaDataFilePath $Emulator $GameInstallPath
+    $gameMetaData = ConvertTo-MetaDataTable $Emulator $gameMetadataPath
+
     $newGame = New-Object "Playnite.SDK.Models.Game"
+    $newGame.InstallDirectory = $GameInstallPath
     $newGame.GameId = switch ($Emulator.BuiltInConfigId) {
-        "rpcs3" { $GameMetadata.TITLE_ID }
-        "vita3k" { $GameMetadata.TITLE_ID }
+        "rpcs3" { $gameMetaData.TITLE_ID }
+        "vita3k" { $gameMetaData.TITLE_ID }
     }
     $newGame.Name = switch ($Emulator.BuiltInConfigId) {
-        "rpcs3" { $GameMetadata.TITLE }
-        "vita3k" { $GameMetadata.TITLE }
+        "rpcs3" { $gameMetaData.TITLE }
+        "vita3k" { $gameMetaData.TITLE }
     }
     $newGame.Name = ($newGame.Name -creplace '\P{IsBasicLatin}').replace("`n", " ")
     $newGame.PlatformIds = $Platform.Id
     $newGame.IsInstalled = $true
-    $newGame.RegionIds = Get-GameRegionId $Emulator $GameMetadata
+    $newGame.RegionIds = Get-GameRegionId $Emulator $gameMetaData
 
     $newAction = New-Object "Playnite.SDK.Models.GameAction"
     $newAction.Type = "Emulator"
@@ -308,7 +315,8 @@ function Add-VFSGameToLibrary() {
     $newAction.EmulatorProfileId = ($Emulator.AllProfiles | Select-Object -First 1).Id
     $newGame.GameActions = $newAction
 
-    If ((Get-IsGameValid $emulator $newGame $GameMetadata) -and (-not (Get-IsGameDuplicate $emulator $newGame))) {
+
+    If ((Get-IsGameValid $emulator $newGame $gameMetaData) -and (-not (Get-IsGameDuplicate $emulator $newGame))) {
         $PlayniteApi.Database.Games.Add($newGame)
         $__logger.Info("Added game: $($newGame.Name)")
         return $true
@@ -332,10 +340,10 @@ function ConvertTo-ParamTable {
     $keyTable = [System.Text.Encoding]::UTF8.GetString($Data[$keyTableStart..($dataTableStart - 1)]).Replace("`0", "|").Trim("|").Split("|")
     $dataTable = $Data[$dataTableStart..($Data.Length - 1)]
 
-    # $__logger.Trace("ConvertTo-ParamTable - keyTableStart=$($keyTableStart)")
-    # $__logger.Trace("ConvertTo-ParamTable - dataTableStart=$($dataTableStart)")
-    # $__logger.Trace("ConvertTo-ParamTable - tableEntries=$($tableEntries)")
-    # $__logger.Trace("ConvertTo-ParamTable - keyTable=$($keyTable)")
+    $__logger.Trace("ConvertTo-ParamTable - keyTableStart=$($keyTableStart)")
+    $__logger.Trace("ConvertTo-ParamTable - dataTableStart=$($dataTableStart)")
+    $__logger.Trace("ConvertTo-ParamTable - tableEntries=$($tableEntries)")
+    $__logger.Trace("ConvertTo-ParamTable - keyTable=$($keyTable)")
 
     $paramHash = [hashtable]::new()
 
@@ -348,12 +356,12 @@ function ConvertTo-ParamTable {
         $dataOffset = [bitconverter]::ToInt32($indexTableEntry[0x0C..0x0F], 0)
         $valueData = $dataTable[$dataOffset..(($dataOffset + $dataLen) - 1)]
 
-        # $__logger.Trace("ConvertTo-ParamTable - i=$($i)")
-        # $__logger.Trace("ConvertTo-ParamTable - indexTableEntry=$($indexTableEntry)")
-        # $__logger.Trace("ConvertTo-ParamTable - dataFmt=$($dataFmt)")
-        # $__logger.Trace("ConvertTo-ParamTable - dataLen=$($dataLen)")
-        # $__logger.Trace("ConvertTo-ParamTable - dataOffset=$($dataOffset)")
-        # $__logger.Trace("ConvertTo-ParamTable - valueData=$($valueData)")
+        $__logger.Trace("ConvertTo-ParamTable - i=$($i)")
+        $__logger.Trace("ConvertTo-ParamTable - indexTableEntry=$($indexTableEntry)")
+        $__logger.Trace("ConvertTo-ParamTable - dataFmt=$($dataFmt)")
+        $__logger.Trace("ConvertTo-ParamTable - dataLen=$($dataLen)")
+        $__logger.Trace("ConvertTo-ParamTable - dataOffset=$($dataOffset)")
+        $__logger.Trace("ConvertTo-ParamTable - valueData=$($valueData)")
 
         # UTF8-S or UTF8
         if (@(0x0004, 0x0204) -contains $dataFmt) {
@@ -368,14 +376,14 @@ function ConvertTo-ParamTable {
             $value = $dataFmt
         }
 
-        # $__logger.Trace("ConvertTo-ParamTable - key=$($key)")
-        # $__logger.Trace("ConvertTo-ParamTable - value=$($value)")
+        $__logger.Trace("ConvertTo-ParamTable - key=$($key)")
+        $__logger.Trace("ConvertTo-ParamTable - value=$($value)")
 
         $paramHash[$key] = $value
 
     }
 
-    # $__logger.Trace("ConvertTo-ParamTable - paramHash=@($($($paramHash.GetEnumerator() | ForEach-Object {"{0}={1}" -f $_.Name,($_.Value)}) -join ","))".replace("`n", ""))
+    $__logger.Trace("ConvertTo-ParamTable - paramHash=@($($($paramHash.GetEnumerator() | ForEach-Object {"{0}={1}" -f $_.Name,($_.Value)}) -join ","))".replace("`n", ""))
 
     return  $paramHash
 }
